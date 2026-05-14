@@ -1,4 +1,6 @@
-from flask import Flask, request, jsonify, render_template
+import csv
+import io
+from flask import Flask, request, jsonify, render_template, Response
 from database import get_db, init_db
 from datetime import datetime, timedelta, date
 
@@ -123,6 +125,43 @@ def add_reading(user_id):
     rd["category"] = cat
     rd["color"] = color
     return jsonify(rd), 201
+
+
+@app.route("/api/readings/<int:user_id>/export", methods=["GET"])
+def export_readings(user_id):
+    period = request.args.get("period", "all")
+    now = datetime.now()
+
+    if period == "week":
+        since, label = (now - timedelta(days=7)).isoformat(), "last_week"
+    elif period == "month":
+        since, label = (now - timedelta(days=30)).isoformat(), "last_month"
+    elif period == "year":
+        since, label = (now - timedelta(days=365)).isoformat(), "last_year"
+    else:
+        since, label = "1900-01-01", "all_time"
+
+    with get_db() as conn:
+        user = conn.execute("SELECT name FROM users WHERE id = ?", (user_id,)).fetchone()
+        rows = conn.execute(
+            "SELECT reading_date, systolic, diastolic, pulse, notes FROM readings "
+            "WHERE user_id = ? AND reading_date >= ? ORDER BY reading_date DESC",
+            (user_id, since),
+        ).fetchall()
+
+    output = io.StringIO()
+    writer = csv.writer(output)
+    writer.writerow(["Date & Time", "Systolic (mmHg)", "Diastolic (mmHg)", "Pulse (bpm)", "Category", "Notes"])
+    for r in rows:
+        rd = row_to_dict(r)
+        cat, _ = classify_bp(rd["systolic"], rd["diastolic"])
+        writer.writerow([rd["reading_date"], rd["systolic"], rd["diastolic"],
+                         rd["pulse"] or "", cat, rd["notes"] or ""])
+
+    username = user["name"].replace(" ", "_") if user else "user"
+    filename = f"bp_{username}_{label}.csv"
+    return Response(output.getvalue(), mimetype="text/csv",
+                    headers={"Content-Disposition": f"attachment; filename={filename}"})
 
 
 @app.route("/api/readings/<int:reading_id>", methods=["DELETE"])

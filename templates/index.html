@@ -289,6 +289,12 @@
         <input type="number" id="f-pulse" min="30" max="220" placeholder="72" />
       </div>
     </div>
+    <div style="margin-top:10px">
+      <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:.88rem;color:var(--muted)">
+        <input type="checkbox" id="f-past" onchange="onPastToggle()" style="width:auto;border:none;padding:0;margin:0" />
+        This is a past reading (enter the actual date above)
+      </label>
+    </div>
     <div class="form-notes">
       <textarea id="f-notes" placeholder="Notes (optional)…"></textarea>
     </div>
@@ -315,7 +321,10 @@
 
   <!-- Readings table -->
   <div class="card" id="table-card" style="display:none">
-    <div class="card-title">Reading History</div>
+    <div class="card-title" style="display:flex;justify-content:space-between;align-items:center">
+      Reading History
+      <button class="btn btn-ghost btn-sm" onclick="openExportModal()">Export CSV</button>
+    </div>
     <div class="table-wrap">
       <table>
         <thead>
@@ -351,6 +360,24 @@
     </div>
   </div>
 
+</div>
+
+<!-- Export modal -->
+<div class="overlay" id="export-overlay" onclick="maybeCloseExport(event)">
+  <div class="modal">
+    <h2>Export Readings as CSV</h2>
+    <p style="color:var(--muted);font-size:.9rem;margin-bottom:16px">Select the time range to include:</p>
+    <div style="display:flex;flex-direction:column;gap:12px;margin-bottom:20px">
+      <label style="display:flex;align-items:center;gap:10px;cursor:pointer"><input type="radio" name="export-period" value="week" /> Last Week</label>
+      <label style="display:flex;align-items:center;gap:10px;cursor:pointer"><input type="radio" name="export-period" value="month" checked /> Last Month</label>
+      <label style="display:flex;align-items:center;gap:10px;cursor:pointer"><input type="radio" name="export-period" value="year" /> Last Year</label>
+      <label style="display:flex;align-items:center;gap:10px;cursor:pointer"><input type="radio" name="export-period" value="all" /> All Time</label>
+    </div>
+    <div class="modal-actions">
+      <button class="btn btn-ghost" onclick="closeExportModal()">Cancel</button>
+      <button class="btn btn-primary" onclick="doExport()">Download CSV</button>
+    </div>
+  </div>
 </div>
 
 <!-- New profile modal -->
@@ -518,6 +545,10 @@ async function loadReadings() {
   });
 }
 
+function onPastToggle() {
+  $("f-date").value = $("f-past").checked ? "" : nowLocal();
+}
+
 async function saveReading() {
   if (!currentUserId) return;
   const sys   = $("f-sys").value;
@@ -526,6 +557,7 @@ async function saveReading() {
   const dt    = $("f-date").value;
   const notes = $("f-notes").value;
   if (!sys || !dia) { alert("Systolic and diastolic are required."); return; }
+  if ($("f-past").checked && !dt) { alert("Please enter the date and time of the past reading."); return; }
   await api("POST", `/api/readings/${currentUserId}`, {
     systolic: +sys, diastolic: +dia,
     pulse: pulse ? +pulse : null,
@@ -533,6 +565,7 @@ async function saveReading() {
     notes
   });
   $("f-sys").value = $("f-dia").value = $("f-pulse").value = $("f-notes").value = "";
+  $("f-past").checked = false;
   $("f-date").value = nowLocal();
   $("save-msg").style.display = "inline";
   setTimeout(() => { $("save-msg").style.display = "none"; }, 2000);
@@ -668,6 +701,16 @@ function switchTab(btn) {
   btn.classList.add("active");
   currentPeriod = btn.dataset.period;
   loadChart();
+}
+
+// ── Export ─────────────────────────────────────────────────────────────────────
+function openExportModal()  { $("export-overlay").classList.add("active"); }
+function closeExportModal() { $("export-overlay").classList.remove("active"); }
+function maybeCloseExport(e) { if (e.target === $("export-overlay")) closeExportModal(); }
+function doExport() {
+  const period = document.querySelector('input[name="export-period"]:checked')?.value || "all";
+  window.location.href = `/api/readings/${currentUserId}/export?period=${period}`;
+  closeExportModal();
 }
 
 // ── Modal ──────────────────────────────────────────────────────────────────────

@@ -11,7 +11,9 @@
       "Bash(lsof *)",
       "Bash(curl -sv http://localhost:5000/)",
       "Bash(curl -s http://localhost:8080/api/users)",
-      "Bash(open *)"
+      "Bash(open *)",
+      "Bash(git push *)",
+      "Bash(git remote *)"
     ]
   }
 }
