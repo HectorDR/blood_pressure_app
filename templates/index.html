@@ -1,0 +1,728 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Blood Pressure Tracker</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-annotation@3.0.1/dist/chartjs-plugin-annotation.min.js"></script>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --bg: #f0f4f8;
+    --card: #ffffff;
+    --primary: #3b82f6;
+    --primary-dark: #2563eb;
+    --border: #e2e8f0;
+    --text: #1e293b;
+    --muted: #64748b;
+    --radius: 12px;
+    --shadow: 0 2px 12px rgba(0,0,0,.08);
+  }
+
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    min-height: 100vh;
+  }
+
+  header {
+    background: var(--primary);
+    color: #fff;
+    padding: 16px 24px;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    box-shadow: 0 2px 8px rgba(59,130,246,.4);
+  }
+  header h1 { font-size: 1.3rem; font-weight: 700; }
+  header svg { flex-shrink: 0; }
+
+  .container { max-width: 900px; margin: 0 auto; padding: 24px 16px; }
+
+  /* ── Cards ── */
+  .card {
+    background: var(--card);
+    border-radius: var(--radius);
+    padding: 20px 24px;
+    box-shadow: var(--shadow);
+    margin-bottom: 20px;
+  }
+  .card-title {
+    font-size: .8rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: .06em;
+    color: var(--muted);
+    margin-bottom: 14px;
+  }
+
+  /* ── Profile bar ── */
+  .profile-bar {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 10px;
+  }
+  select, input, textarea, button {
+    font-family: inherit;
+    font-size: .95rem;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 8px 12px;
+    outline: none;
+    transition: border-color .15s;
+  }
+  select:focus, input:focus, textarea:focus { border-color: var(--primary); }
+  select { background: #fff; cursor: pointer; min-width: 180px; }
+
+  .btn {
+    border: none;
+    border-radius: 8px;
+    padding: 9px 16px;
+    cursor: pointer;
+    font-weight: 600;
+    font-size: .9rem;
+    transition: opacity .15s, background .15s;
+  }
+  .btn:hover { opacity: .88; }
+  .btn-primary { background: var(--primary); color: #fff; }
+  .btn-danger  { background: #ef4444; color: #fff; }
+  .btn-ghost   { background: var(--bg); color: var(--text); border: 1px solid var(--border); }
+  .btn-sm { padding: 5px 10px; font-size: .82rem; }
+
+  /* ── Profile info strip ── */
+  .profile-info {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 20px;
+    margin-top: 14px;
+    padding-top: 14px;
+    border-top: 1px solid var(--border);
+  }
+  .info-item label { font-size: .75rem; color: var(--muted); display: block; margin-bottom: 2px; }
+  .info-item span  { font-weight: 600; }
+
+  /* ── New profile modal ── */
+  .overlay {
+    display: none;
+    position: fixed; inset: 0;
+    background: rgba(0,0,0,.45);
+    z-index: 100;
+    align-items: center;
+    justify-content: center;
+  }
+  .overlay.active { display: flex; }
+  .modal {
+    background: var(--card);
+    border-radius: var(--radius);
+    padding: 28px;
+    width: 360px;
+    max-width: 95vw;
+    box-shadow: 0 8px 40px rgba(0,0,0,.2);
+  }
+  .modal h2 { margin-bottom: 18px; font-size: 1.1rem; }
+  .field { margin-bottom: 14px; }
+  .field label { display: block; font-size: .85rem; color: var(--muted); margin-bottom: 5px; }
+  .field input { width: 100%; }
+  .modal-actions { display: flex; gap: 10px; justify-content: flex-end; margin-top: 18px; }
+
+  /* ── Warning banner ── */
+  #warning-banner {
+    display: none;
+    border-radius: var(--radius);
+    padding: 16px 20px;
+    margin-bottom: 20px;
+    border-left: 5px solid;
+  }
+  #warning-banner .warn-title { font-weight: 700; font-size: 1rem; }
+  #warning-banner .warn-msg   { font-size: .9rem; margin-top: 4px; }
+
+  /* ── Reading form ── */
+  .form-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+    gap: 12px;
+    align-items: end;
+  }
+  .form-grid .field { margin-bottom: 0; }
+  .form-grid .field label { display: block; font-size: .82rem; color: var(--muted); margin-bottom: 4px; }
+  .form-grid .field input { width: 100%; }
+  .form-notes { margin-top: 12px; }
+  .form-notes textarea { width: 100%; resize: vertical; min-height: 56px; }
+  .form-submit { margin-top: 14px; display: flex; gap: 10px; align-items: center; }
+  #save-msg { font-size: .85rem; color: #27ae60; display: none; }
+
+  /* ── Chart tabs ── */
+  .tab-bar {
+    display: flex;
+    gap: 6px;
+    margin-bottom: 16px;
+  }
+  .tab-btn {
+    padding: 7px 16px;
+    border-radius: 8px;
+    border: 1px solid var(--border);
+    background: var(--bg);
+    cursor: pointer;
+    font-size: .88rem;
+    font-weight: 600;
+    color: var(--muted);
+    transition: all .15s;
+  }
+  .tab-btn.active {
+    background: var(--primary);
+    color: #fff;
+    border-color: var(--primary);
+  }
+  #chart-wrap { position: relative; height: 280px; }
+
+  /* ── Table ── */
+  .table-wrap { overflow-x: auto; }
+  table { width: 100%; border-collapse: collapse; font-size: .88rem; }
+  th {
+    text-align: left;
+    padding: 10px 12px;
+    font-size: .76rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: .05em;
+    color: var(--muted);
+    border-bottom: 2px solid var(--border);
+  }
+  td { padding: 10px 12px; border-bottom: 1px solid var(--border); vertical-align: middle; }
+  tr:last-child td { border-bottom: none; }
+  tr:hover td { background: #f8fafc; }
+  .badge {
+    display: inline-block;
+    padding: 3px 9px;
+    border-radius: 20px;
+    font-size: .78rem;
+    font-weight: 600;
+    color: #fff;
+  }
+  .empty-state {
+    text-align: center;
+    padding: 40px 20px;
+    color: var(--muted);
+  }
+  .empty-state svg { display: block; margin: 0 auto 12px; opacity: .3; }
+
+  /* ── BP reference ── */
+  .ref-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+    gap: 10px;
+  }
+  .ref-item {
+    border-radius: 8px;
+    padding: 10px 14px;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    color: #fff;
+  }
+  .ref-item .ref-name  { font-weight: 700; font-size: .88rem; }
+  .ref-item .ref-range { font-size: .78rem; opacity: .9; }
+
+  @media (max-width: 600px) {
+    .form-grid { grid-template-columns: 1fr 1fr; }
+    header h1  { font-size: 1.1rem; }
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/>
+    <polyline points="8 12 10 14 16 10" stroke="#fff" stroke-width="2.2"/>
+  </svg>
+  <h1>Blood Pressure Tracker</h1>
+</header>
+
+<div class="container">
+
+  <!-- Profile card -->
+  <div class="card">
+    <div class="card-title">Profile</div>
+    <div class="profile-bar">
+      <select id="profile-select" onchange="onProfileChange()">
+        <option value="">— Select a profile —</option>
+      </select>
+      <button class="btn btn-primary" onclick="openModal()">+ New Profile</button>
+      <button class="btn btn-danger btn-sm" id="del-profile-btn" style="display:none" onclick="deleteProfile()">Delete Profile</button>
+    </div>
+    <div class="profile-info" id="profile-info" style="display:none">
+      <div class="info-item"><label>Name</label><span id="pi-name">—</span></div>
+      <div class="info-item"><label>Date of Birth</label><span id="pi-dob">—</span></div>
+      <div class="info-item"><label>Age</label><span id="pi-age">—</span></div>
+    </div>
+  </div>
+
+  <!-- Warning banner -->
+  <div id="warning-banner">
+    <div class="warn-title" id="warn-title"></div>
+    <div class="warn-msg"  id="warn-msg"></div>
+  </div>
+
+  <!-- Add reading -->
+  <div class="card" id="reading-card" style="display:none">
+    <div class="card-title">Add Reading</div>
+    <div class="form-grid">
+      <div class="field">
+        <label>Date &amp; Time</label>
+        <input type="datetime-local" id="f-date" />
+      </div>
+      <div class="field">
+        <label>Systolic (mmHg) *</label>
+        <input type="number" id="f-sys" min="50" max="250" placeholder="120" />
+      </div>
+      <div class="field">
+        <label>Diastolic (mmHg) *</label>
+        <input type="number" id="f-dia" min="30" max="150" placeholder="80" />
+      </div>
+      <div class="field">
+        <label>Pulse (bpm)</label>
+        <input type="number" id="f-pulse" min="30" max="220" placeholder="72" />
+      </div>
+    </div>
+    <div style="margin-top:10px">
+      <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:.88rem;color:var(--muted)">
+        <input type="checkbox" id="f-past" onchange="onPastToggle()" style="width:auto;border:none;padding:0;margin:0" />
+        This is a past reading (enter the actual date above)
+      </label>
+    </div>
+    <div class="form-notes">
+      <textarea id="f-notes" placeholder="Notes (optional)…"></textarea>
+    </div>
+    <div class="form-submit">
+      <button class="btn btn-primary" onclick="saveReading()">Save Reading</button>
+      <span id="save-msg">Saved!</span>
+    </div>
+  </div>
+
+  <!-- Charts -->
+  <div class="card" id="chart-card" style="display:none">
+    <div class="card-title">Trend</div>
+    <div class="tab-bar">
+      <button class="tab-btn active" data-period="week"  onclick="switchTab(this)">Week</button>
+      <button class="tab-btn"        data-period="month" onclick="switchTab(this)">Month</button>
+      <button class="tab-btn"        data-period="year"  onclick="switchTab(this)">Year</button>
+      <button class="tab-btn"        data-period="all"   onclick="switchTab(this)">All Time</button>
+    </div>
+    <div id="chart-wrap">
+      <canvas id="bp-chart"></canvas>
+    </div>
+    <p id="chart-empty" style="display:none;text-align:center;color:var(--muted);padding:20px 0">No readings in this period.</p>
+  </div>
+
+  <!-- Readings table -->
+  <div class="card" id="table-card" style="display:none">
+    <div class="card-title" style="display:flex;justify-content:space-between;align-items:center">
+      Reading History
+      <button class="btn btn-ghost btn-sm" onclick="openExportModal()">Export CSV</button>
+    </div>
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>Date &amp; Time</th>
+            <th>Systolic</th>
+            <th>Diastolic</th>
+            <th>Pulse</th>
+            <th>Category</th>
+            <th>Notes</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody id="readings-tbody"></tbody>
+      </table>
+      <div class="empty-state" id="table-empty" style="display:none">
+        <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+        No readings yet. Add your first reading above.
+      </div>
+    </div>
+  </div>
+
+  <!-- BP reference -->
+  <div class="card">
+    <div class="card-title">Blood Pressure Categories (AHA)</div>
+    <div class="ref-grid">
+      <div class="ref-item" style="background:#27ae60"><div class="ref-name">Normal</div><div class="ref-range">&lt; 120 / &lt; 80</div></div>
+      <div class="ref-item" style="background:#f39c12"><div class="ref-name">Elevated</div><div class="ref-range">120–129 / &lt; 80</div></div>
+      <div class="ref-item" style="background:#e67e22"><div class="ref-name">High — Stage 1</div><div class="ref-range">130–139 / 80–89</div></div>
+      <div class="ref-item" style="background:#e74c3c"><div class="ref-name">High — Stage 2</div><div class="ref-range">≥ 140 / ≥ 90</div></div>
+      <div class="ref-item" style="background:#c0392b"><div class="ref-name">Hypertensive Crisis</div><div class="ref-range">&gt; 180 / &gt; 120</div></div>
+      <div class="ref-item" style="background:#2980b9"><div class="ref-name">Low (Hypotension)</div><div class="ref-range">&lt; 90 / &lt; 60</div></div>
+    </div>
+  </div>
+
+</div>
+
+<!-- Export modal -->
+<div class="overlay" id="export-overlay" onclick="maybeCloseExport(event)">
+  <div class="modal">
+    <h2>Export Readings as CSV</h2>
+    <p style="color:var(--muted);font-size:.9rem;margin-bottom:16px">Select the time range to include:</p>
+    <div style="display:flex;flex-direction:column;gap:12px;margin-bottom:20px">
+      <label style="display:flex;align-items:center;gap:10px;cursor:pointer"><input type="radio" name="export-period" value="week" /> Last Week</label>
+      <label style="display:flex;align-items:center;gap:10px;cursor:pointer"><input type="radio" name="export-period" value="month" checked /> Last Month</label>
+      <label style="display:flex;align-items:center;gap:10px;cursor:pointer"><input type="radio" name="export-period" value="year" /> Last Year</label>
+      <label style="display:flex;align-items:center;gap:10px;cursor:pointer"><input type="radio" name="export-period" value="all" /> All Time</label>
+    </div>
+    <div class="modal-actions">
+      <button class="btn btn-ghost" onclick="closeExportModal()">Cancel</button>
+      <button class="btn btn-primary" onclick="doExport()">Download CSV</button>
+    </div>
+  </div>
+</div>
+
+<!-- New profile modal -->
+<div class="overlay" id="modal-overlay" onclick="maybeCloseModal(event)">
+  <div class="modal">
+    <h2>New Profile</h2>
+    <div class="field">
+      <label>Full Name *</label>
+      <input type="text" id="m-name" placeholder="e.g. Jane Smith" />
+    </div>
+    <div class="field">
+      <label>Date of Birth *</label>
+      <input type="date" id="m-dob" />
+    </div>
+    <div class="modal-actions">
+      <button class="btn btn-ghost" onclick="closeModal()">Cancel</button>
+      <button class="btn btn-primary" onclick="createProfile()">Create</button>
+    </div>
+  </div>
+</div>
+
+<script>
+// ── State ──────────────────────────────────────────────────────────────────────
+let currentUserId = null;
+let currentPeriod = "week";
+let bpChart = null;
+
+// ── Helpers ────────────────────────────────────────────────────────────────────
+const $ = id => document.getElementById(id);
+
+function fmtDate(isoStr) {
+  if (!isoStr) return "—";
+  const d = new Date(isoStr);
+  return isNaN(d) ? isoStr : d.toLocaleString(undefined, {
+    year: "numeric", month: "short", day: "numeric",
+    hour: "2-digit", minute: "2-digit"
+  });
+}
+
+function fmtDateOnly(isoStr) {
+  if (!isoStr) return "—";
+  const [y, m, d] = isoStr.split("-");
+  return new Date(+y, +m - 1, +d).toLocaleDateString(undefined, { year: "numeric", month: "long", day: "numeric" });
+}
+
+function nowLocal() {
+  const d = new Date();
+  d.setSeconds(0, 0);
+  return d.toISOString().slice(0, 16);
+}
+
+function classifyBP(sys, dia) {
+  if (sys > 180 || dia > 120) return { cat: "Hypertensive Crisis", color: "#c0392b", msg: "Seek emergency care immediately." };
+  if (sys >= 140 || dia >= 90)  return { cat: "High — Stage 2",      color: "#e74c3c", msg: "Consult your doctor promptly." };
+  if (sys >= 130 || dia >= 80)  return { cat: "High — Stage 1",      color: "#e67e22", msg: "Lifestyle changes and follow-up with your doctor are recommended." };
+  if (sys >= 120 && sys <= 129 && dia < 80) return { cat: "Elevated", color: "#f39c12", msg: "Monitor regularly and adopt heart-healthy habits." };
+  if (sys < 90  || dia < 60)   return { cat: "Low (Hypotension)",   color: "#2980b9", msg: "Stay hydrated; see a doctor if you feel dizzy or faint." };
+  return { cat: "Normal", color: "#27ae60", msg: "Great! Keep up your healthy lifestyle." };
+}
+
+// ── API ────────────────────────────────────────────────────────────────────────
+async function api(method, path, body) {
+  const res = await fetch(path, {
+    method,
+    headers: { "Content-Type": "application/json" },
+    body: body ? JSON.stringify(body) : undefined
+  });
+  return res.json();
+}
+
+// ── Profiles ───────────────────────────────────────────────────────────────────
+async function loadProfiles() {
+  const users = await api("GET", "/api/users");
+  const sel = $("profile-select");
+  const prev = sel.value;
+  sel.innerHTML = '<option value="">— Select a profile —</option>';
+  users.forEach(u => {
+    const opt = document.createElement("option");
+    opt.value = u.id;
+    opt.textContent = u.name;
+    sel.appendChild(opt);
+  });
+  if (prev) sel.value = prev;
+}
+
+async function onProfileChange() {
+  const id = $("profile-select").value;
+  if (!id) {
+    currentUserId = null;
+    $("profile-info").style.display = "none";
+    $("del-profile-btn").style.display = "none";
+    $("reading-card").style.display = "none";
+    $("chart-card").style.display = "none";
+    $("table-card").style.display = "none";
+    $("warning-banner").style.display = "none";
+    return;
+  }
+  currentUserId = +id;
+  const user = await api("GET", `/api/users/${id}`);
+  $("pi-name").textContent = user.name;
+  $("pi-dob").textContent  = fmtDateOnly(user.date_of_birth);
+  $("pi-age").textContent  = user.age + " yrs";
+  $("profile-info").style.display = "flex";
+  $("del-profile-btn").style.display = "";
+  $("reading-card").style.display = "";
+  $("chart-card").style.display = "";
+  $("table-card").style.display = "";
+  await loadReadings();
+  await loadChart();
+}
+
+async function createProfile() {
+  const name = $("m-name").value.trim();
+  const dob  = $("m-dob").value;
+  if (!name || !dob) { alert("Please fill in all fields."); return; }
+  const user = await api("POST", "/api/users", { name, date_of_birth: dob });
+  closeModal();
+  $("m-name").value = "";
+  $("m-dob").value  = "";
+  await loadProfiles();
+  $("profile-select").value = user.id;
+  await onProfileChange();
+}
+
+async function deleteProfile() {
+  if (!currentUserId) return;
+  if (!confirm("Delete this profile and all its readings? This cannot be undone.")) return;
+  await api("DELETE", `/api/users/${currentUserId}`);
+  currentUserId = null;
+  $("profile-select").value = "";
+  await loadProfiles();
+  await onProfileChange();
+}
+
+// ── Readings ───────────────────────────────────────────────────────────────────
+async function loadReadings() {
+  if (!currentUserId) return;
+  const readings = await api("GET", `/api/readings/${currentUserId}`);
+  const tbody = $("readings-tbody");
+  tbody.innerHTML = "";
+
+  if (readings.length === 0) {
+    $("table-empty").style.display = "";
+    $("warning-banner").style.display = "none";
+    return;
+  }
+  $("table-empty").style.display = "none";
+
+  // Warning from most recent reading
+  const latest = readings[0];
+  showWarning(latest.systolic, latest.diastolic);
+
+  readings.forEach(r => {
+    const tr = document.createElement("tr");
+    tr.innerHTML = `
+      <td>${fmtDate(r.reading_date)}</td>
+      <td><strong>${r.systolic}</strong></td>
+      <td><strong>${r.diastolic}</strong></td>
+      <td>${r.pulse ?? "—"}</td>
+      <td><span class="badge" style="background:${r.color}">${r.category}</span></td>
+      <td style="max-width:160px;word-break:break-word">${r.notes ?? ""}</td>
+      <td><button class="btn btn-danger btn-sm" onclick="deleteReading(${r.id})">✕</button></td>
+    `;
+    tbody.appendChild(tr);
+  });
+}
+
+function onPastToggle() {
+  $("f-date").value = $("f-past").checked ? "" : nowLocal();
+}
+
+async function saveReading() {
+  if (!currentUserId) return;
+  const sys   = $("f-sys").value;
+  const dia   = $("f-dia").value;
+  const pulse = $("f-pulse").value;
+  const dt    = $("f-date").value;
+  const notes = $("f-notes").value;
+  if (!sys || !dia) { alert("Systolic and diastolic are required."); return; }
+  if ($("f-past").checked && !dt) { alert("Please enter the date and time of the past reading."); return; }
+  await api("POST", `/api/readings/${currentUserId}`, {
+    systolic: +sys, diastolic: +dia,
+    pulse: pulse ? +pulse : null,
+    reading_date: dt || nowLocal(),
+    notes
+  });
+  $("f-sys").value = $("f-dia").value = $("f-pulse").value = $("f-notes").value = "";
+  $("f-past").checked = false;
+  $("f-date").value = nowLocal();
+  $("save-msg").style.display = "inline";
+  setTimeout(() => { $("save-msg").style.display = "none"; }, 2000);
+  await loadReadings();
+  await loadChart();
+}
+
+async function deleteReading(id) {
+  if (!confirm("Delete this reading?")) return;
+  await api("DELETE", `/api/readings/${id}`);
+  await loadReadings();
+  await loadChart();
+}
+
+function showWarning(sys, dia) {
+  const { cat, color, msg } = classifyBP(sys, dia);
+  const banner = $("warning-banner");
+  banner.style.display = "block";
+  banner.style.background = color + "18";
+  banner.style.borderColor = color;
+  $("warn-title").style.color = color;
+  $("warn-title").textContent = `Latest Reading: ${sys}/${dia} mmHg — ${cat}`;
+  $("warn-msg").textContent   = msg;
+}
+
+// ── Chart ──────────────────────────────────────────────────────────────────────
+async function loadChart() {
+  if (!currentUserId) return;
+  const data = await api("GET", `/api/readings/${currentUserId}/chart?period=${currentPeriod}`);
+
+  const ctx = $("bp-chart");
+
+  if (data.length === 0) {
+    $("chart-empty").style.display = "";
+    ctx.style.display = "none";
+    if (bpChart) { bpChart.destroy(); bpChart = null; }
+    return;
+  }
+  $("chart-empty").style.display = "none";
+  ctx.style.display = "";
+
+  const labels = data.map(d => {
+    const dt = new Date(d.reading_date);
+    return isNaN(dt) ? d.reading_date : dt.toLocaleString(undefined, {
+      month: "short", day: "numeric",
+      hour: "2-digit", minute: "2-digit"
+    });
+  });
+  const sysVals   = data.map(d => d.systolic);
+  const diaVals   = data.map(d => d.diastolic);
+  const pulseVals = data.map(d => d.pulse);
+  const hasPulse  = pulseVals.some(v => v != null);
+
+  const datasets = [
+    {
+      label: "Systolic",
+      data: sysVals,
+      borderColor: "#e74c3c",
+      backgroundColor: "rgba(231,76,60,.08)",
+      tension: .35, pointRadius: 4, fill: false
+    },
+    {
+      label: "Diastolic",
+      data: diaVals,
+      borderColor: "#3b82f6",
+      backgroundColor: "rgba(59,130,246,.08)",
+      tension: .35, pointRadius: 4, fill: false
+    }
+  ];
+  if (hasPulse) {
+    datasets.push({
+      label: "Pulse",
+      data: pulseVals,
+      borderColor: "#8b5cf6",
+      borderDash: [5, 4],
+      tension: .35, pointRadius: 3, fill: false
+    });
+  }
+
+  if (bpChart) bpChart.destroy();
+
+  bpChart = new Chart(ctx, {
+    type: "line",
+    data: { labels, datasets },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      interaction: { mode: "index", intersect: false },
+      plugins: {
+        legend: { position: "top" },
+        tooltip: {
+          callbacks: {
+            afterBody(items) {
+              const sys = items.find(i => i.dataset.label === "Systolic")?.raw;
+              const dia = items.find(i => i.dataset.label === "Diastolic")?.raw;
+              if (sys != null && dia != null) {
+                const { cat } = classifyBP(sys, dia);
+                return [`Category: ${cat}`];
+              }
+            }
+          }
+        },
+        annotation: {
+          annotations: {
+            normalSys: {
+              type: "line", yMin: 120, yMax: 120,
+              borderColor: "rgba(39,174,96,.5)", borderWidth: 1,
+              borderDash: [6, 4],
+              label: { content: "Sys 120", display: true, position: "end", font: { size: 10 } }
+            },
+            normalDia: {
+              type: "line", yMin: 80, yMax: 80,
+              borderColor: "rgba(59,130,246,.4)", borderWidth: 1,
+              borderDash: [6, 4],
+              label: { content: "Dia 80", display: true, position: "end", font: { size: 10 } }
+            }
+          }
+        }
+      },
+      scales: {
+        x: { ticks: { maxRotation: 40, font: { size: 11 } } },
+        y: {
+          min: 40,
+          title: { display: true, text: "mmHg / bpm" }
+        }
+      }
+    }
+  });
+}
+
+function switchTab(btn) {
+  document.querySelectorAll(".tab-btn").forEach(b => b.classList.remove("active"));
+  btn.classList.add("active");
+  currentPeriod = btn.dataset.period;
+  loadChart();
+}
+
+// ── Export ─────────────────────────────────────────────────────────────────────
+function openExportModal()  { $("export-overlay").classList.add("active"); }
+function closeExportModal() { $("export-overlay").classList.remove("active"); }
+function maybeCloseExport(e) { if (e.target === $("export-overlay")) closeExportModal(); }
+function doExport() {
+  const period = document.querySelector('input[name="export-period"]:checked')?.value || "all";
+  window.location.href = `/api/readings/${currentUserId}/export?period=${period}`;
+  closeExportModal();
+}
+
+// ── Modal ──────────────────────────────────────────────────────────────────────
+function openModal()  { $("modal-overlay").classList.add("active"); $("m-name").focus(); }
+function closeModal() { $("modal-overlay").classList.remove("active"); }
+function maybeCloseModal(e) { if (e.target === $("modal-overlay")) closeModal(); }
+
+// ── Init ───────────────────────────────────────────────────────────────────────
+(async function init() {
+  $("f-date").value = nowLocal();
+  await loadProfiles();
+})();
+</script>
+</body>
+</html>
