@@ -1,0 +1,19 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(python app.py)",
+      "Bash(curl -s http://localhost:5000/api/users)",
+      "Bash(curl -s -X POST http://localhost:5000/api/users -H 'Content-Type: application/json' -d '{\"name\":\"Jane Smith\",\"date_of_birth\":\"1975-03-15\"}')",
+      "Bash(python -m json.tool)",
+      "Bash(curl -s -X POST http://localhost:5000/api/readings/1 -H 'Content-Type: application/json' -d '{\"systolic\":118,\"diastolic\":76,\"pulse\":68,\"reading_date\":\"2026-05-13T08:00\",\"notes\":\"Morning\"}')",
+      "Bash(curl -s -X POST http://localhost:5000/api/readings/1 -H 'Content-Type: application/json' -d '{\"systolic\":155,\"diastolic\":95,\"pulse\":82,\"reading_date\":\"2026-05-13T10:00\",\"notes\":\"Stressed\"}')",
+      "Bash(curl -s \"http://localhost:5000/api/readings/1/chart?period=week\")",
+      "Bash(lsof *)",
+      "Bash(curl -sv http://localhost:5000/)",
+      "Bash(curl -s http://localhost:8080/api/users)",
+      "Bash(open *)",
+      "Bash(git push *)",
+      "Bash(git remote *)"
+    ]
+  }
+}
