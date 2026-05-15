@@ -1,5 +1,6 @@
 import csv
 import io
+import statistics
 from flask import Flask, request, jsonify, render_template, Response
 from database import get_db, init_db
 from datetime import datetime, timedelta, date
@@ -194,6 +195,63 @@ def chart_data(user_id):
 
     points = [row_to_dict(r) for r in rows]
     return jsonify(points)
+
+
+# ── Report ─────────────────────────────────────────────────────────────────────
+
+@app.route("/api/readings/<int:user_id>/report", methods=["GET"])
+def report_data(user_id):
+    period = request.args.get("period", "month")
+    now = datetime.now()
+
+    if period == "week":
+        since = (now - timedelta(days=7)).isoformat()
+    elif period == "month":
+        since = (now - timedelta(days=30)).isoformat()
+    elif period == "ytd":
+        since = date(now.year, 1, 1).isoformat()
+    elif period == "year":
+        since = (now - timedelta(days=365)).isoformat()
+    else:
+        since = "1900-01-01"
+
+    with get_db() as conn:
+        rows = conn.execute(
+            "SELECT systolic, diastolic, pulse FROM readings "
+            "WHERE user_id = ? AND reading_date >= ? ORDER BY reading_date ASC",
+            (user_id, since),
+        ).fetchall()
+
+    readings = [row_to_dict(r) for r in rows]
+
+    def compute_stats(values):
+        if not values:
+            return None
+        modes = statistics.multimode(values)
+        return {
+            "count": len(values),
+            "mean": round(statistics.mean(values), 1),
+            "mode": modes[0] if len(modes) == 1 else None,
+            "stdev": round(statistics.stdev(values), 1) if len(values) > 1 else 0.0,
+            "min": min(values),
+            "max": max(values),
+        }
+
+    categories = {}
+    for r in readings:
+        cat, color = classify_bp(r["systolic"], r["diastolic"])
+        if cat not in categories:
+            categories[cat] = {"count": 0, "color": color}
+        categories[cat]["count"] += 1
+
+    pulse_vals = [r["pulse"] for r in readings if r["pulse"] is not None]
+    return jsonify({
+        "count": len(readings),
+        "systolic": compute_stats([r["systolic"] for r in readings]),
+        "diastolic": compute_stats([r["diastolic"] for r in readings]),
+        "pulse": compute_stats(pulse_vals) if pulse_vals else None,
+        "categories": categories,
+    })
 
 
 # ── Main ───────────────────────────────────────────────────────────────────────

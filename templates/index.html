@@ -227,6 +227,56 @@
   .ref-item .ref-name  { font-weight: 700; font-size: .88rem; }
   .ref-item .ref-range { font-size: .78rem; opacity: .9; }
 
+  /* ── Report ── */
+  .report-stats {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+    gap: 12px;
+    margin-bottom: 20px;
+  }
+  .stat-card {
+    background: var(--bg);
+    border-radius: 10px;
+    padding: 16px;
+  }
+  .stat-card-title {
+    font-size: .75rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: .06em;
+    color: var(--muted);
+    margin-bottom: 10px;
+    padding-bottom: 8px;
+    border-bottom: 2px solid var(--border);
+  }
+  .stat-row {
+    display: flex;
+    justify-content: space-between;
+    font-size: .875rem;
+    padding: 5px 0;
+    border-bottom: 1px solid var(--border);
+  }
+  .stat-row:last-child { border-bottom: none; }
+  .stat-label { color: var(--muted); }
+  .stat-value { font-weight: 600; }
+  .cat-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 10px;
+    font-size: .875rem;
+  }
+  .cat-label { min-width: 170px; }
+  .cat-bar-wrap {
+    flex: 1;
+    background: var(--border);
+    border-radius: 4px;
+    height: 8px;
+    overflow: hidden;
+  }
+  .cat-bar { height: 100%; border-radius: 4px; transition: width .4s; }
+  .cat-count { min-width: 70px; text-align: right; color: var(--muted); font-size: .82rem; }
+
   @media (max-width: 600px) {
     .form-grid { grid-template-columns: 1fr 1fr; }
     header h1  { font-size: 1.1rem; }
@@ -317,6 +367,24 @@
       <canvas id="bp-chart"></canvas>
     </div>
     <p id="chart-empty" style="display:none;text-align:center;color:var(--muted);padding:20px 0">No readings in this period.</p>
+  </div>
+
+  <!-- Report -->
+  <div class="card" id="report-card" style="display:none">
+    <div class="card-title">Report</div>
+    <div class="tab-bar">
+      <button class="tab-btn" data-rperiod="week"  onclick="switchReportTab(this)">Week</button>
+      <button class="tab-btn active" data-rperiod="month" onclick="switchReportTab(this)">Month</button>
+      <button class="tab-btn" data-rperiod="ytd"   onclick="switchReportTab(this)">Year to Date</button>
+      <button class="tab-btn" data-rperiod="year"  onclick="switchReportTab(this)">Year</button>
+      <button class="tab-btn" data-rperiod="all"   onclick="switchReportTab(this)">All Time</button>
+    </div>
+    <p id="report-empty" style="display:none;text-align:center;color:var(--muted);padding:20px 0">No readings in this period.</p>
+    <div id="report-content">
+      <div class="report-stats" id="report-stats"></div>
+      <div class="card-title" style="margin-bottom:12px">Category Breakdown</div>
+      <div id="report-cats"></div>
+    </div>
   </div>
 
   <!-- Readings table -->
@@ -471,6 +539,7 @@ async function onProfileChange() {
     $("del-profile-btn").style.display = "none";
     $("reading-card").style.display = "none";
     $("chart-card").style.display = "none";
+    $("report-card").style.display = "none";
     $("table-card").style.display = "none";
     $("warning-banner").style.display = "none";
     return;
@@ -484,9 +553,11 @@ async function onProfileChange() {
   $("del-profile-btn").style.display = "";
   $("reading-card").style.display = "";
   $("chart-card").style.display = "";
+  $("report-card").style.display = "";
   $("table-card").style.display = "";
   await loadReadings();
   await loadChart();
+  await loadReport();
 }
 
 async function createProfile() {
@@ -697,10 +768,85 @@ async function loadChart() {
 }
 
 function switchTab(btn) {
-  document.querySelectorAll(".tab-btn").forEach(b => b.classList.remove("active"));
+  document.querySelectorAll("#chart-card .tab-btn").forEach(b => b.classList.remove("active"));
   btn.classList.add("active");
   currentPeriod = btn.dataset.period;
   loadChart();
+}
+
+// ── Report ─────────────────────────────────────────────────────────────────────
+let currentReportPeriod = "month";
+
+const CAT_ORDER = [
+  "Normal", "Elevated", "High - Stage 1", "High - Stage 2",
+  "Hypertensive Crisis", "Low (Hypotension)"
+];
+
+async function loadReport() {
+  if (!currentUserId) return;
+  const data = await api("GET", `/api/readings/${currentUserId}/report?period=${currentReportPeriod}`);
+  const empty   = $("report-empty");
+  const content = $("report-content");
+
+  if (data.count === 0) {
+    empty.style.display = "";
+    content.style.display = "none";
+    return;
+  }
+  empty.style.display = "none";
+  content.style.display = "";
+
+  const metrics = [
+    { label: "Systolic",  key: "systolic",  unit: "mmHg", color: "#e74c3c" },
+    { label: "Diastolic", key: "diastolic", unit: "mmHg", color: "#3b82f6" },
+    { label: "Pulse",     key: "pulse",     unit: "bpm",  color: "#8b5cf6" },
+  ];
+
+  const statsEl = $("report-stats");
+  statsEl.innerHTML = "";
+  for (const m of metrics) {
+    const s = data[m.key];
+    const card = document.createElement("div");
+    card.className = "stat-card";
+    if (!s) {
+      card.innerHTML = `
+        <div class="stat-card-title" style="border-color:${m.color}">${m.label}</div>
+        <div style="color:var(--muted);font-size:.85rem;padding:8px 0">No data recorded</div>`;
+    } else {
+      card.innerHTML = `
+        <div class="stat-card-title" style="border-color:${m.color}">
+          ${m.label} <span style="font-weight:400;text-transform:none;letter-spacing:0;font-size:.7rem">${s.count} readings</span>
+        </div>
+        <div class="stat-row"><span class="stat-label">Mean</span><span class="stat-value">${s.mean} ${m.unit}</span></div>
+        <div class="stat-row"><span class="stat-label">Mode</span><span class="stat-value">${s.mode !== null && s.mode !== undefined ? s.mode + ' ' + m.unit : '—'}</span></div>
+        <div class="stat-row"><span class="stat-label">Std Dev</span><span class="stat-value">± ${s.stdev} ${m.unit}</span></div>
+        <div class="stat-row"><span class="stat-label">Min</span><span class="stat-value">${s.min} ${m.unit}</span></div>
+        <div class="stat-row"><span class="stat-label">Max</span><span class="stat-value">${s.max} ${m.unit}</span></div>`;
+    }
+    statsEl.appendChild(card);
+  }
+
+  const catsEl = $("report-cats");
+  catsEl.innerHTML = "";
+  for (const catName of CAT_ORDER) {
+    const cat = data.categories[catName];
+    if (!cat) continue;
+    const pct = Math.round((cat.count / data.count) * 100);
+    const row = document.createElement("div");
+    row.className = "cat-row";
+    row.innerHTML = `
+      <span class="cat-label">${catName}</span>
+      <div class="cat-bar-wrap"><div class="cat-bar" style="width:${pct}%;background:${cat.color}"></div></div>
+      <span class="cat-count">${cat.count} (${pct}%)</span>`;
+    catsEl.appendChild(row);
+  }
+}
+
+function switchReportTab(btn) {
+  document.querySelectorAll("#report-card .tab-btn").forEach(b => b.classList.remove("active"));
+  btn.classList.add("active");
+  currentReportPeriod = btn.dataset.rperiod;
+  loadReport();
 }
 
 // ── Export ─────────────────────────────────────────────────────────────────────
